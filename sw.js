@@ -1,5 +1,5 @@
 /* Jednoduchý service worker – appka funguje offline (kromě vyhledávání v OpenFoodFacts). */
-const CACHE = 'kt-v2';
+const CACHE = 'kt-v3';
 const ASSETS = [
   './',
   './index.html',

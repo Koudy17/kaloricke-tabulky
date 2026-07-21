@@ -247,13 +247,36 @@ function offToFood(p) {
     source: 'off',
   };
 }
-async function offSearch(term) {
-  const url = 'https://world.openfoodfacts.org/api/v2/search?' + new URLSearchParams({
-    search_terms: term, page_size: '25', sort_by: 'popularity_key',
-    fields: 'product_name,product_name_cs,generic_name,brands,nutriments',
+// Fulltextové hledání dělá Search-a-licious (search.openfoodfacts.org) — jediná
+// služba OFF, co skutečně hledá podle textu. Nemá ale CORS, tak ji voláme přes
+// několik veřejných proxy NAJEDNOU a vezmeme tu, co odpoví první (spolehlivější
+// než spoléhat na jednu). Pozn.: v2/search zde nejde použít — text ignoruje.
+const PROXIES = [
+  u => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u),
+];
+async function fetchViaProxies(targetUrl, timeoutMs = 7000) {
+  const attempts = PROXIES.map(async wrap => {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(wrap(targetUrl), { signal: ctrl.signal });
+      clearTimeout(to);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) { clearTimeout(to); throw e; }
   });
-  const data = await fetchJson(url, { tries: 4 });
-  return (data.products || []).map(offToFood).filter(Boolean);
+  return Promise.any(attempts); // první úspěšná vyhrává
+}
+
+async function offSearch(term) {
+  const url = 'https://search.openfoodfacts.org/search?' + new URLSearchParams({
+    q: term, page_size: '25',
+    fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments',
+  });
+  const data = await fetchViaProxies(url);
+  return (data.hits || []).map(offToFood).filter(Boolean);
 }
 async function offByBarcode(code) {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?` +
