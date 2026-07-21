@@ -115,6 +115,17 @@
           <span>Množství (g)</span>
           <input id="portionGrams" type="number" inputmode="decimal" min="0" step="1" value="100" />
         </label>
+        <div class="quick-label">Nemáš váhu? Klepni na odhad:</div>
+        <div id="quickPortions" class="chips">
+          <button type="button" class="chip" data-g="5">Lžička<small>5 g</small></button>
+          <button type="button" class="chip" data-g="15">Lžíce<small>15 g</small></button>
+          <button type="button" class="chip" data-g="20">Plátek<small>20 g</small></button>
+          <button type="button" class="chip" data-g="30">Krajíc<small>30 g</small></button>
+          <button type="button" class="chip" data-g="25">Hrst<small>25 g</small></button>
+          <button type="button" class="chip" data-g="100">Kus<small>100 g</small></button>
+          <button type="button" class="chip" data-g="150">Porce<small>150 g</small></button>
+          <button type="button" class="chip" data-g="250">Hrnek<small>250 g</small></button>
+        </div>
         <label class="field">
           <span>Jídlo dne</span>
           <select id="portionMeal">

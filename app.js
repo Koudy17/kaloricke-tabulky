@@ -186,6 +186,13 @@ function updatePortionPreview() {
     `B <b>${r1(pendingFood.prot100 * f)}</b> g &nbsp; ` +
     `S <b>${r1(pendingFood.carb100 * f)}</b> g &nbsp; ` +
     `T <b>${r1(pendingFood.fat100 * f)}</b> g`;
+  syncPortionChips();
+}
+// Zvýrazní rychlou porci, když gramáž odpovídá jejímu odhadu.
+function syncPortionChips() {
+  const g = parseFloat($('portionGrams').value) || 0;
+  document.querySelectorAll('#quickPortions .chip').forEach(c =>
+    c.classList.toggle('active', parseFloat(c.dataset.g) === g));
 }
 function savePortion() {
   const g = parseFloat($('portionGrams').value);
@@ -715,6 +722,12 @@ $('scanStart').addEventListener('click', () => { if (scanStream) stopScan(); els
 $('portionBack').addEventListener('click', () => closeSheet('portionSheet'));
 $('portionGrams').addEventListener('input', updatePortionPreview);
 $('portionSave').addEventListener('click', savePortion);
+$('quickPortions').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  $('portionGrams').value = chip.dataset.g;
+  updatePortionPreview();
+});
 
 $('newCustom').addEventListener('click', () => openFoodEditor(null));
 $('foodBack').addEventListener('click', () => closeSheet('foodSheet'));
