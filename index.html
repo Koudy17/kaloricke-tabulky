@@ -70,6 +70,7 @@
         <button class="tab active" data-tab="search">Vyhledat</button>
         <button class="tab" data-tab="scan">Sken</button>
         <button class="tab" data-tab="custom">Vlastní</button>
+        <button class="tab" data-tab="quick">Rychlé</button>
       </div>
 
       <!-- Vyhledat -->
@@ -79,7 +80,29 @@
           <button id="searchBtn" class="primary sm">Hledat</button>
         </div>
         <div id="searchStatus" class="status"></div>
+        <div id="quickPick"></div>
         <div id="searchResults" class="results"></div>
+      </div>
+
+      <!-- Rychlé přidání kalorií -->
+      <div class="tabpane hidden" data-pane="quick">
+        <p class="hint">Když nevíš přesně co jíš (třeba v restauraci) — zadej jen kalorie, makra jsou nepovinná.</p>
+        <label class="field"><span>Název (nepovinné)</span><input id="qName" type="text" placeholder="Např. oběd v restauraci" /></label>
+        <label class="field"><span>Kalorie (kcal)</span><input id="qKcal" type="number" inputmode="decimal" min="0" placeholder="kcal" /></label>
+        <div class="row2">
+          <label class="field"><span>Bílkoviny (g)</span><input id="qProt" type="number" inputmode="decimal" min="0" /></label>
+          <label class="field"><span>Sacharidy (g)</span><input id="qCarb" type="number" inputmode="decimal" min="0" /></label>
+        </div>
+        <label class="field"><span>Tuky (g)</span><input id="qFat" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Jídlo dne</span>
+          <select id="qMeal">
+            <option value="breakfast">Snídaně</option>
+            <option value="lunch">Oběd</option>
+            <option value="dinner">Večeře</option>
+            <option value="snack">Svačina</option>
+          </select>
+        </label>
+        <button id="qSave" class="primary big">Přidat do deníku</button>
       </div>
 
       <!-- Sken -->
@@ -137,6 +160,7 @@
         </label>
         <div id="portionPreview" class="portion-preview"></div>
         <button id="portionSave" class="primary big">Přidat do deníku</button>
+        <button id="portionFav" class="ghost hidden">☆ Přidat k oblíbeným</button>
       </div>
     </div>
   </div>

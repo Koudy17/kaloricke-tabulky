@@ -6,6 +6,9 @@ const LS = {
   log: 'kt_log',
   settings: 'kt_settings',
   profile: 'kt_profile',
+  favorites: 'kt_favorites',
+  weights: 'kt_weights',
+  water: 'kt_water',
 };
 const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -14,6 +17,9 @@ let foods = load(LS.foods, []);            // vlastní jídla
 let log = load(LS.log, []);                // deníkové záznamy
 let settings = load(LS.settings, { kcal: 2000, prot: 100, carb: 250, fat: 65 });
 let profile = load(LS.profile, {});        // vstupy do kalkulačky cílů
+let favorites = load(LS.favorites, []);    // oblíbená jídla (snapshoty)
+let weights = load(LS.weights, []);        // záznamy váhy [{date, kg}]
+let water = load(LS.water, {});            // pitný režim { 'YYYY-MM-DD': ml }
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -115,10 +121,10 @@ function renderDay() {
         const row = document.createElement('div');
         row.className = 'entry';
         row.innerHTML = `
-          <div class="entry-main">
+          <button class="entry-main" data-edit="${e.id}">
             <div class="entry-name">${esc(e.name)}</div>
             <div class="entry-sub">${r0(e.grams)} g · B ${r1(n.prot)} · S ${r1(n.carb)} · T ${r1(n.fat)}</div>
-          </div>
+          </button>
           <span class="entry-kcal">${r0(n.kcal)}</span>
           <button class="entry-del" data-del="${e.id}" aria-label="Smazat">×</button>`;
         el.appendChild(row);
@@ -156,9 +162,93 @@ function openAdd(meal) {
   switchTab('search');
   $('searchResults').innerHTML = '';
   $('searchStatus').textContent = '';
+  $('searchInput').value = '';
+  $('portionMeal').value = pendingMeal;
+  $('qMeal').value = pendingMeal;
+  renderQuickPick();
   renderCustomList();
   openSheet('addSheet');
-  setTimeout(() => $('searchInput').focus(), 150);
+}
+
+/* ---------- Nedávná a oblíbená jídla ---------- */
+function foodKey(f) { return f.name + '|' + f.kcal100; }
+function foodSnapshot(f) {
+  return { name: f.name, kcal100: f.kcal100 || 0, prot100: f.prot100 || 0, carb100: f.carb100 || 0, fat100: f.fat100 || 0, source: f.source || 'off' };
+}
+function recentFoods(limit = 12) {
+  const seen = new Set(); const out = [];
+  for (let i = log.length - 1; i >= 0 && out.length < limit; i--) {
+    const e = log[i];
+    if (e.source === 'quick') continue;      // rychlé kalorie nejsou opakovatelné jídlo
+    const k = foodKey(e);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(foodSnapshot(e));
+  }
+  return out;
+}
+function isFav(f) { return favorites.some(x => foodKey(x) === foodKey(f)); }
+function toggleFav(f) {
+  if (isFav(f)) favorites = favorites.filter(x => foodKey(x) !== foodKey(f));
+  else favorites.unshift(foodSnapshot(f));
+  save(LS.favorites, favorites);
+}
+function starButton(f, onToggle) {
+  const b = document.createElement('button');
+  b.className = 'result-star' + (isFav(f) ? ' on' : '');
+  b.textContent = isFav(f) ? '★' : '☆';
+  b.title = 'Oblíbené';
+  b.addEventListener('click', ev => {
+    ev.stopPropagation();
+    toggleFav(f);
+    b.textContent = isFav(f) ? '★' : '☆';
+    b.classList.toggle('on', isFav(f));
+    if (onToggle) onToggle();
+  });
+  return b;
+}
+function quickRow(f) {
+  const row = document.createElement('div'); row.className = 'result';
+  const pick = document.createElement('button'); pick.className = 'result-pick';
+  pick.innerHTML =
+    `<div class="result-main"><div class="result-name">${esc(f.name)}</div>` +
+    `<div class="result-sub">B ${r1(f.prot100)} · S ${r1(f.carb100)} · T ${r1(f.fat100)} / 100 g</div></div>` +
+    `<span class="result-kcal">${r0(f.kcal100)} kcal</span>`;
+  pick.addEventListener('click', () => pickFood(f));
+  row.appendChild(pick);
+  row.appendChild(starButton(f, renderQuickPick));
+  return row;
+}
+function renderQuickPick() {
+  const c = $('quickPick');
+  c.innerHTML = '';
+  const favs = favorites.slice(0, 20);
+  const favSet = new Set(favs.map(foodKey));
+  const recent = recentFoods(12).filter(f => !favSet.has(foodKey(f)));
+  if (!favs.length && !recent.length) return;
+  const title = t => { const d = document.createElement('div'); d.className = 'qp-title'; d.textContent = t; return d; };
+  if (favs.length) { c.appendChild(title('★ Oblíbená')); favs.forEach(f => c.appendChild(quickRow(f))); }
+  if (recent.length) { c.appendChild(title('Naposledy')); recent.forEach(f => c.appendChild(quickRow(f))); }
+}
+
+/* ---------- Rychlé přidání kalorií ---------- */
+function saveQuickKcal() {
+  const kcal = parseFloat($('qKcal').value);
+  if (!kcal || kcal <= 0) { toast('Zadej kalorie'); return; }
+  const name = $('qName').value.trim() || 'Rychlé kalorie';
+  log.push({
+    id: uid(), date: currentDate, meal: $('qMeal').value, name, grams: 100,
+    kcal100: r1(kcal),
+    prot100: r1(parseFloat($('qProt').value) || 0),
+    carb100: r1(parseFloat($('qCarb').value) || 0),
+    fat100: r1(parseFloat($('qFat').value) || 0),
+    source: 'quick',
+  });
+  save(LS.log, log);
+  ['qName', 'qKcal', 'qProt', 'qCarb', 'qFat'].forEach(id => { $(id).value = ''; });
+  closeSheet('addSheet');
+  renderDay();
+  toast('Přidáno do deníku');
 }
 
 function switchTab(name) {
@@ -167,13 +257,35 @@ function switchTab(name) {
   if (name !== 'scan') stopScan();
 }
 
+let editingEntryId = null;
 function pickFood(food) {
-  pendingFood = food;
+  editingEntryId = null;
+  pendingFood = foodSnapshot(food);
   $('portionName').textContent = food.name;
   $('portionPer100').textContent =
     `Na 100 g: ${r0(food.kcal100)} kcal · B ${r1(food.prot100)} · S ${r1(food.carb100)} · T ${r1(food.fat100)}`;
   $('portionGrams').value = 100;
   $('portionMeal').value = pendingMeal;
+  $('portionSave').textContent = 'Přidat do deníku';
+  $('portionFav').classList.remove('hidden');
+  $('portionFav').textContent = isFav(food) ? '★ Oblíbené' : '☆ Přidat k oblíbeným';
+  updatePortionPreview();
+  openSheet('portionSheet');
+}
+// Úprava už zapsaného záznamu (klik na položku v deníku).
+function editEntry(id) {
+  const e = log.find(x => x.id === id);
+  if (!e) return;
+  editingEntryId = id;
+  pendingMeal = e.meal;
+  pendingFood = foodSnapshot(e);
+  $('portionName').textContent = e.name;
+  $('portionPer100').textContent =
+    `Na 100 g: ${r0(e.kcal100)} kcal · B ${r1(e.prot100)} · S ${r1(e.carb100)} · T ${r1(e.fat100)}`;
+  $('portionGrams').value = e.grams;
+  $('portionMeal').value = e.meal;
+  $('portionSave').textContent = 'Uložit změnu';
+  $('portionFav').classList.add('hidden');
   updatePortionPreview();
   openSheet('portionSheet');
 }
@@ -197,17 +309,26 @@ function syncPortionChips() {
 function savePortion() {
   const g = parseFloat($('portionGrams').value);
   if (!g || g <= 0) { toast('Zadej množství v gramech'); return; }
-  log.push({
-    id: uid(), date: currentDate, meal: $('portionMeal').value,
-    name: pendingFood.name, grams: g,
-    kcal100: pendingFood.kcal100 || 0, prot100: pendingFood.prot100 || 0,
-    carb100: pendingFood.carb100 || 0, fat100: pendingFood.fat100 || 0,
-  });
+  const meal = $('portionMeal').value;
+  const editing = !!editingEntryId;
+  if (editing) {
+    const e = log.find(x => x.id === editingEntryId);
+    if (e) { e.grams = g; e.meal = meal; }
+  } else {
+    log.push({
+      id: uid(), date: currentDate, meal,
+      name: pendingFood.name, grams: g,
+      kcal100: pendingFood.kcal100 || 0, prot100: pendingFood.prot100 || 0,
+      carb100: pendingFood.carb100 || 0, fat100: pendingFood.fat100 || 0,
+      source: pendingFood.source || 'off',
+    });
+  }
   save(LS.log, log);
+  editingEntryId = null;
   closeSheet('portionSheet');
   closeSheet('addSheet');
   renderDay();
-  toast('Přidáno do deníku');
+  toast(editing ? 'Uloženo' : 'Přidáno do deníku');
 }
 
 /* ---------- OpenFoodFacts ---------- */
@@ -260,6 +381,7 @@ function offToFood(p) {
   if (!name) return null;
   const brand = firstBrand(p);
   if (brand) name += ` (${brand})`;
+  const countries = [].concat(p.countries_tags || []).join(',');
   return {
     name,
     kcal100: r1(kcal),
@@ -267,7 +389,12 @@ function offToFood(p) {
     carb100: r1(+n.carbohydrates_100g || 0),
     fat100: r1(+n.fat_100g || 0),
     source: 'off',
+    cz: /czech|czechia|slovak/i.test(countries),
   };
+}
+// České a slovenské produkty nahoru (stabilní řazení).
+function sortCzFirst(items) {
+  return items.map((f, i) => [f, i]).sort((a, b) => (b[0].cz - a[0].cz) || (a[1] - b[1])).map(x => x[0]);
 }
 // Fulltextové hledání dělá Search-a-licious (search.openfoodfacts.org) — jediná
 // služba OFF, co skutečně hledá podle textu. Nemá ale CORS, tak ji voláme přes
@@ -321,17 +448,17 @@ async function offSearch(term) {
     clearTimeout(to);
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.hits)) return data.hits.map(offToFood).filter(Boolean);
+      if (data && Array.isArray(data.hits)) return sortCzFirst(data.hits.map(offToFood).filter(Boolean));
     }
   } catch { /* vlastní proxy není k dispozici → zkusíme veřejné níže */ }
 
   // 2) Záloha: veřejné CORS proxy na Search-a-licious (funguje i na GitHub Pages).
   const url = 'https://search.openfoodfacts.org/search?' + new URLSearchParams({
     q, page_size: '25',
-    fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments',
+    fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments,countries_tags',
   });
   const data = await fetchViaProxies(url, 9000);
-  return (data.hits || []).map(offToFood).filter(Boolean);
+  return sortCzFirst((data.hits || []).map(offToFood).filter(Boolean));
 }
 async function offByBarcode(code) {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?` +
@@ -348,6 +475,7 @@ async function doSearch() {
   const seq = ++searchSeq;
   $('searchStatus').textContent = 'Hledám…';
   $('searchResults').innerHTML = '';
+  $('quickPick').innerHTML = '';
   try {
     const items = await offSearch(term);
     if (seq !== searchSeq) return;
@@ -368,16 +496,18 @@ async function doSearch() {
 function renderResults(container, items) {
   container.innerHTML = '';
   for (const f of items) {
-    const b = document.createElement('button');
-    b.className = 'result';
-    b.innerHTML = `
-      <div class="result-main">
-        <div class="result-name">${esc(f.name)}</div>
-        <div class="result-sub">B ${r1(f.prot100)} · S ${r1(f.carb100)} · T ${r1(f.fat100)} / 100 g</div>
-      </div>
-      <span class="result-kcal">${r0(f.kcal100)} kcal</span>`;
-    b.addEventListener('click', () => pickFood(f));
-    container.appendChild(b);
+    const row = document.createElement('div');
+    row.className = 'result';
+    const pick = document.createElement('button');
+    pick.className = 'result-pick';
+    pick.innerHTML =
+      `<div class="result-main"><div class="result-name">${f.cz ? '🇨🇿 ' : ''}${esc(f.name)}</div>` +
+      `<div class="result-sub">B ${r1(f.prot100)} · S ${r1(f.carb100)} · T ${r1(f.fat100)} / 100 g</div></div>` +
+      `<span class="result-kcal">${r0(f.kcal100)} kcal</span>`;
+    pick.addEventListener('click', () => pickFood(f));
+    row.appendChild(pick);
+    row.appendChild(starButton(f));
+    container.appendChild(row);
   }
 }
 
@@ -521,7 +651,7 @@ function saveSettings() {
   toast('Nastavení uloženo');
 }
 function exportData() {
-  const blob = new Blob([JSON.stringify({ foods, log, settings, profile, v: 1 }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ foods, log, settings, profile, favorites, weights, water, v: 1 }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `kaloricke-tabulky-zaloha-${todayKey()}.json`;
@@ -538,7 +668,11 @@ function importData(file) {
       log = d.log;
       settings = d.settings || settings;
       profile = d.profile || profile;
+      favorites = Array.isArray(d.favorites) ? d.favorites : favorites;
+      weights = Array.isArray(d.weights) ? d.weights : weights;
+      water = (d.water && typeof d.water === 'object') ? d.water : water;
       save(LS.foods, foods); save(LS.log, log); save(LS.settings, settings); save(LS.profile, profile);
+      save(LS.favorites, favorites); save(LS.weights, weights); save(LS.water, water);
       closeSheet('settingsSheet');
       renderDay();
       toast('Data obnovena ze zálohy');
@@ -709,7 +843,10 @@ $('meals').addEventListener('click', e => {
     save(LS.log, log);
     renderDay();
     toast('Odebráno');
+    return;
   }
+  const edit = e.target.closest('[data-edit]');
+  if (edit) return editEntry(edit.dataset.edit);
 });
 
 $('addBack').addEventListener('click', () => { stopScan(); closeSheet('addSheet'); });
@@ -719,15 +856,22 @@ $('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSea
 
 $('scanStart').addEventListener('click', () => { if (scanStream) stopScan(); else startScan(); });
 
-$('portionBack').addEventListener('click', () => closeSheet('portionSheet'));
+$('portionBack').addEventListener('click', () => { editingEntryId = null; closeSheet('portionSheet'); });
 $('portionGrams').addEventListener('input', updatePortionPreview);
 $('portionSave').addEventListener('click', savePortion);
+$('portionFav').addEventListener('click', () => {
+  if (!pendingFood) return;
+  toggleFav(pendingFood);
+  $('portionFav').textContent = isFav(pendingFood) ? '★ Oblíbené' : '☆ Přidat k oblíbeným';
+  toast(isFav(pendingFood) ? 'Přidáno k oblíbeným' : 'Odebráno z oblíbených');
+});
 $('quickPortions').addEventListener('click', e => {
   const chip = e.target.closest('.chip');
   if (!chip) return;
   $('portionGrams').value = chip.dataset.g;
   updatePortionPreview();
 });
+$('qSave').addEventListener('click', saveQuickKcal);
 
 $('newCustom').addEventListener('click', () => openFoodEditor(null));
 $('foodBack').addEventListener('click', () => closeSheet('foodSheet'));

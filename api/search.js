@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
   const url = 'https://search.openfoodfacts.org/search?' + new URLSearchParams({
     q,
     page_size: '25',
-    fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments',
+    fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments,countries_tags',
   });
 
   try {
