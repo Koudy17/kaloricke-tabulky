@@ -72,7 +72,7 @@ function sumNutri(entries) {
 const $ = id => document.getElementById(id);
 
 function renderDay() {
-  $('dayLabel').textContent = dateHuman(currentDate);
+  $('dayLabelText').textContent = dateHuman(currentDate);
   const entries = dayEntries();
   const tot = sumNutri(entries);
 

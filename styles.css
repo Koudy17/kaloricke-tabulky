@@ -40,9 +40,11 @@ a{color:var(--brand)}
 }
 .daylabel{
   flex:1;background:transparent;border:0;color:#fff;
-  font-size:17px;font-weight:600;text-align:center;padding:8px;
+  font-size:17px;font-weight:600;padding:8px;
   border-radius:10px;
+  display:flex;align-items:center;justify-content:center;gap:7px;
 }
+.cal-ico{width:17px;height:17px;flex:0 0 auto;opacity:.9}
 .daylabel:active{background:rgba(255,255,255,.15)}
 .iconbtn{
   background:rgba(255,255,255,.15);border:0;color:#fff;
