@@ -55,6 +55,16 @@
     </section>
 
     <div id="meals"></div>
+
+    <section class="card water-card">
+      <div class="water-head"><span>💧 Pitný režim</span><span id="waterVal">0 / 2000 ml</span></div>
+      <div class="bar"><div id="waterBar" class="bar-fill water"></div></div>
+      <div class="water-btns">
+        <button class="water-btn" data-water="-250">−250</button>
+        <button class="water-btn" data-water="250">+250 ml</button>
+        <button class="water-btn" data-water="500">+500 ml</button>
+      </div>
+    </section>
   </main>
 
   <!-- Přidat jídlo -->
@@ -196,11 +206,16 @@
       </div>
       <div class="portion-body">
         <button id="openCalc" class="primary big" style="margin-top:0">🎯 Spočítat cíle z váhy</button>
+        <div class="row2" style="margin-top:10px">
+          <button id="openWeight" class="ghost" style="margin-top:0">📉 Váha a graf</button>
+          <button id="openOverview" class="ghost" style="margin-top:0">📊 Týdenní přehled</button>
+        </div>
         <p class="hint" style="margin-top:14px">Denní cíle. Spočítej si je z váhy tlačítkem nahoře, nebo vyplň ručně.</p>
         <label class="field"><span>Cíl energie (kcal)</span><input id="sKcal" type="number" inputmode="decimal" min="0" /></label>
         <label class="field"><span>Bílkoviny (g)</span><input id="sProt" type="number" inputmode="decimal" min="0" /></label>
         <label class="field"><span>Sacharidy (g)</span><input id="sCarb" type="number" inputmode="decimal" min="0" /></label>
         <label class="field"><span>Tuky (g)</span><input id="sFat" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>💧 Cíl pití vody (ml)</span><input id="sWater" type="number" inputmode="decimal" min="0" step="250" /></label>
         <button id="settingsSave" class="primary big">Uložit</button>
         <hr class="sep" />
         <button id="exportData" class="ghost">Zálohovat data (export)</button>
@@ -283,6 +298,41 @@
         </div>
         <div id="calGrid" class="cal-grid"></div>
         <p class="hint small" style="text-align:center">Tečka = den, kam sis něco zapsal.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Váha a graf -->
+  <div id="weightSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="weightBack" class="linkbtn">Zavřít</button>
+        <strong>Váha</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <div class="searchrow">
+          <input id="weightInput" type="number" inputmode="decimal" min="20" max="400" step="0.1" placeholder="Dnešní váha (kg)" />
+          <button id="weightSave" class="primary sm">Uložit</button>
+        </div>
+        <div id="weightChart" class="weight-chart"></div>
+        <div id="weightList" class="weight-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Týdenní přehled -->
+  <div id="overviewSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="overviewBack" class="linkbtn">Zavřít</button>
+        <strong>Týdenní přehled</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <div id="overviewStats" class="ov-stats"></div>
+        <div id="overviewChart" class="ov-chart"></div>
+        <p class="hint small" style="text-align:center">Posledních 7 dní · sloupec = příjem, čára = cíl</p>
       </div>
     </div>
   </div>

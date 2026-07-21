@@ -15,7 +15,8 @@ const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
 let foods = load(LS.foods, []);            // vlastní jídla
 let log = load(LS.log, []);                // deníkové záznamy
-let settings = load(LS.settings, { kcal: 2000, prot: 100, carb: 250, fat: 65 });
+let settings = load(LS.settings, { kcal: 2000, prot: 100, carb: 250, fat: 65, waterGoal: 2000 });
+if (settings.waterGoal == null) settings.waterGoal = 2000;
 let profile = load(LS.profile, {});        // vstupy do kalkulačky cílů
 let favorites = load(LS.favorites, []);    // oblíbená jídla (snapshoty)
 let weights = load(LS.weights, []);        // záznamy váhy [{date, kg}]
@@ -132,6 +133,7 @@ function renderDay() {
     }
     wrap.appendChild(el);
   }
+  renderWater();
 }
 function setMacro(key, val, goal) {
   $(key + 'Val').textContent = `${r0(val)} / ${r0(goal)} g`;
@@ -636,6 +638,7 @@ function openSettings() {
   $('sProt').value = settings.prot;
   $('sCarb').value = settings.carb;
   $('sFat').value = settings.fat;
+  $('sWater').value = settings.waterGoal;
   openSheet('settingsSheet');
 }
 function saveSettings() {
@@ -644,6 +647,7 @@ function saveSettings() {
     prot: parseFloat($('sProt').value) || 0,
     carb: parseFloat($('sCarb').value) || 0,
     fat: parseFloat($('sFat').value) || 0,
+    waterGoal: parseFloat($('sWater').value) || 2000,
   };
   save(LS.settings, settings);
   closeSheet('settingsSheet');
@@ -781,6 +785,109 @@ function applyCalc() {
   toast('Cíle nastaveny podle výpočtu');
 }
 
+/* ---------- Pitný režim ---------- */
+function renderWater() {
+  const ml = water[currentDate] || 0;
+  const goal = settings.waterGoal || 2000;
+  $('waterVal').textContent = `${ml} / ${goal} ml`;
+  $('waterBar').style.width = (goal > 0 ? Math.min(ml / goal, 1) * 100 : 0) + '%';
+}
+function addWater(delta) {
+  const ml = Math.max((water[currentDate] || 0) + delta, 0);
+  if (ml === 0) delete water[currentDate]; else water[currentDate] = ml;
+  save(LS.water, water);
+  renderWater();
+}
+
+/* ---------- Váha a graf ---------- */
+function openWeight() {
+  $('weightInput').value = '';
+  renderWeightChart();
+  renderWeightList();
+  openSheet('weightSheet');
+}
+function saveWeight() {
+  const kg = parseFloat($('weightInput').value);
+  if (!(kg >= 20 && kg <= 400)) { toast('Zadej váhu (20–400 kg)'); return; }
+  const today = todayKey();
+  const ex = weights.find(w => w.date === today);
+  if (ex) ex.kg = kg; else weights.push({ date: today, kg });
+  weights.sort((a, b) => a.date < b.date ? -1 : 1);
+  save(LS.weights, weights);
+  profile.weight = kg; save(LS.profile, profile); // pro kalkulačku cílů
+  $('weightInput').value = '';
+  renderWeightChart();
+  renderWeightList();
+  toast('Váha uložena');
+}
+function deleteWeight(date) {
+  weights = weights.filter(w => w.date !== date);
+  save(LS.weights, weights);
+  renderWeightChart();
+  renderWeightList();
+}
+function renderWeightChart() {
+  const el = $('weightChart');
+  const data = weights.slice(-30);
+  if (data.length < 2) {
+    el.innerHTML = '<div class="ov-empty">Zapiš aspoň dvě vážení a ukáže se graf vývoje.</div>';
+    return;
+  }
+  const kgs = data.map(w => w.kg);
+  const min = Math.min(...kgs), max = Math.max(...kgs);
+  const pad = (max - min) * 0.2 || 1;
+  const lo = min - pad, hi = max + pad;
+  const W = 320, H = 120, L = 6, R = 6, T = 8, B = 8;
+  const x = i => L + (W - L - R) * (data.length === 1 ? 0.5 : i / (data.length - 1));
+  const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const pts = data.map((w, i) => `${x(i).toFixed(1)},${y(w.kg).toFixed(1)}`).join(' ');
+  const dots = data.map((w, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(w.kg).toFixed(1)}" r="2.5" fill="var(--brand)"/>`).join('');
+  const diff = r1(data[data.length - 1].kg - data[0].kg);
+  el.innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" class="wc-svg"><polyline points="${pts}" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>` +
+    `<div class="wc-legend"><span>${data[0].kg} kg</span><span class="${diff <= 0 ? 'down' : 'up'}">${diff > 0 ? '+' : ''}${diff} kg</span><span>${data[data.length - 1].kg} kg</span></div>`;
+}
+function renderWeightList() {
+  const el = $('weightList');
+  el.innerHTML = '';
+  [...weights].reverse().slice(0, 30).forEach(w => {
+    const row = document.createElement('div');
+    row.className = 'wl-row';
+    row.innerHTML = `<span>${dateHuman(w.date)}</span><span class="wl-kg">${w.kg} kg</span><button class="entry-del" data-wdel="${w.date}" aria-label="Smazat">×</button>`;
+    el.appendChild(row);
+  });
+}
+
+/* ---------- Týdenní přehled ---------- */
+function openOverview() { renderOverview(); openSheet('overviewSheet'); }
+function renderOverview() {
+  const days = [];
+  for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(todayKey(d)); }
+  const perDay = days.map(k => ({ key: k, kcal: sumNutri(log.filter(e => e.date === k)).kcal }));
+  const logged = perDay.filter(d => d.kcal > 0);
+  const avg = logged.length ? Math.round(logged.reduce((a, d) => a + d.kcal, 0) / logged.length) : 0;
+  let streak = 0;
+  for (let i = perDay.length - 1; i >= 0; i--) { if (perDay[i].kcal > 0) streak++; else break; }
+  $('overviewStats').innerHTML =
+    `<div class="ov-tile"><div class="ov-num">${avg}</div><div class="ov-lab">Ø kcal/den</div></div>` +
+    `<div class="ov-tile"><div class="ov-num">${logged.length}/7</div><div class="ov-lab">dní zapsáno</div></div>` +
+    `<div class="ov-tile"><div class="ov-num">${streak}</div><div class="ov-lab">série dní</div></div>`;
+  const goal = settings.kcal || 0;
+  const maxV = Math.max(goal, ...perDay.map(d => d.kcal), 1);
+  const dny = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
+  const cols = perDay.map(d => {
+    const h = Math.round((d.kcal / maxV) * 100);
+    const over = goal && d.kcal > goal;
+    return `<div class="ov-col"><div class="ov-bar ${over ? 'over' : ''}" style="height:${h}%"></div></div>`;
+  }).join('');
+  const labels = perDay.map(d => {
+    const lab = dny[new Date(d.key + 'T12:00:00').getDay()];
+    return `<div class="ov-col2"><span>${lab}</span><small>${d.kcal ? r0(d.kcal) : '–'}</small></div>`;
+  }).join('');
+  const goalLine = goal ? `<div class="ov-goal" style="bottom:${Math.round((goal / maxV) * 100)}%"></div>` : '';
+  $('overviewChart').innerHTML = `<div class="ov-plot">${goalLine}${cols}</div><div class="ov-xlabels">${labels}</div>`;
+}
+
 /* ---------- Kalendář ---------- */
 let calYear, calMonth;
 const MONTHS_CS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
@@ -877,6 +984,22 @@ $('newCustom').addEventListener('click', () => openFoodEditor(null));
 $('foodBack').addEventListener('click', () => closeSheet('foodSheet'));
 $('foodSave').addEventListener('click', saveFood);
 $('foodDelete').addEventListener('click', deleteFood);
+
+document.querySelector('.water-btns').addEventListener('click', e => {
+  const b = e.target.closest('[data-water]');
+  if (b) addWater(parseInt(b.dataset.water, 10));
+});
+
+$('openWeight').addEventListener('click', openWeight);
+$('weightBack').addEventListener('click', () => closeSheet('weightSheet'));
+$('weightSave').addEventListener('click', saveWeight);
+$('weightInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveWeight(); });
+$('weightList').addEventListener('click', e => {
+  const b = e.target.closest('[data-wdel]');
+  if (b) deleteWeight(b.dataset.wdel);
+});
+$('openOverview').addEventListener('click', openOverview);
+$('overviewBack').addEventListener('click', () => closeSheet('overviewSheet'));
 
 $('settingsBack').addEventListener('click', () => closeSheet('settingsSheet'));
 $('settingsSave').addEventListener('click', saveSettings);
