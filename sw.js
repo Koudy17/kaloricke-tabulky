@@ -1,5 +1,5 @@
 /* Jednoduchý service worker – appka funguje offline (kromě vyhledávání v OpenFoodFacts). */
-const CACHE = 'kt-v1';
+const CACHE = 'kt-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -26,12 +26,15 @@ self.addEventListener('fetch', e => {
   if (url.hostname.includes('openfoodfacts.org')) return;
   if (e.request.method !== 'GET') return;
 
-  // Vlastní soubory: nejdřív cache, pak síť (a doplň do cache).
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+  // Vlastní soubory: vrať z cache hned (rychlé, funguje offline),
+  // ale na pozadí stáhni čerstvou verzi do cache → příští načtení už je aktuální.
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const cached = await cache.match(e.request);
+    const fromNet = fetch(e.request).then(res => {
+      if (res && res.ok) cache.put(e.request, res.clone());
       return res;
-    }).catch(() => hit))
-  );
+    }).catch(() => null);
+    return cached || (await fromNet) || new Response('Offline', { status: 503 });
+  })());
 });
