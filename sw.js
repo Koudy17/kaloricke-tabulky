@@ -1,5 +1,5 @@
 /* Jednoduchý service worker – appka funguje offline (kromě vyhledávání v OpenFoodFacts). */
-const CACHE = 'kt-v8';
+const CACHE = 'kt-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -22,19 +22,21 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  // Data z OpenFoodFacts nikdy necachujeme – jdou vždy ze sítě.
-  if (url.hostname.includes('openfoodfacts.org')) return;
   if (e.request.method !== 'GET') return;
+  if (url.hostname.includes('openfoodfacts.org')) return; // vyhledávání vždy ze sítě
+  if (url.origin !== location.origin) return;              // cizí (proxy apod.) neřešíme
+  if (url.pathname.startsWith('/api/')) return;            // vlastní API vždy ze sítě
 
-  // Vlastní soubory: vrať z cache hned (rychlé, funguje offline),
-  // ale na pozadí stáhni čerstvou verzi do cache → příští načtení už je aktuální.
+  // App shell = "nejdřív síť": online vždy čerstvá verze (aktualizace hned vidět),
+  // offline se vrátí poslední uložená z cache.
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = await cache.match(e.request);
-    const fromNet = fetch(e.request).then(res => {
-      if (res && res.ok) cache.put(e.request, res.clone());
-      return res;
-    }).catch(() => null);
-    return cached || (await fromNet) || new Response('Offline', { status: 503 });
+    try {
+      const fresh = await fetch(e.request);
+      if (fresh && fresh.ok) cache.put(e.request, fresh.clone());
+      return fresh;
+    } catch {
+      return (await cache.match(e.request)) || (await cache.match('./index.html')) || new Response('Offline', { status: 503 });
+    }
   })());
 });
