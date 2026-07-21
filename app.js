@@ -283,12 +283,32 @@ async function fetchViaProxies(targetUrl, timeoutMs = 7000) {
   return Promise.any(attempts); // první úspěšná vyhrává
 }
 
+// Vyhledávač OFF shoduje podle začátku slova a je citlivý na diakritiku i tvar
+// slova → čeština kvůli skloňování sráží počet výsledků (např. „chleba" najde 5).
+// Rozšíříme dotaz o „kmen" bez diakritiky s hvězdičkou: „chleba" → „chleba chleb*"
+// (mezera funguje jako NEBO), což najde mnohem víc tvarů. Nikdy to neuškodí.
+function stripDiacritics(s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function expandQuery(term) {
+  const t = term.trim();
+  const forms = [t];
+  const stem = stripDiacritics(t.toLowerCase());
+  if (stem.length >= 5) {
+    const wild = stem.slice(0, -1) + '*';       // ubereme koncovku + hvězdička
+    if (!forms.includes(wild)) forms.push(wild);
+  } else if (stem !== t.toLowerCase()) {
+    forms.push(stem);                            // krátká slova aspoň bez diakritiky
+  }
+  return forms.join(' ');
+}
+
 async function offSearch(term) {
+  const q = expandQuery(term);
+
   // 1) Vlastní proxy na Vercelu – rychlá a spolehlivá (když appka běží na Vercelu).
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 6000);
-    const res = await fetch('/api/search?q=' + encodeURIComponent(term), { signal: ctrl.signal });
+    const res = await fetch('/api/search?q=' + encodeURIComponent(q), { signal: ctrl.signal });
     clearTimeout(to);
     if (res.ok) {
       const data = await res.json();
@@ -298,7 +318,7 @@ async function offSearch(term) {
 
   // 2) Záloha: veřejné CORS proxy na Search-a-licious (funguje i na GitHub Pages).
   const url = 'https://search.openfoodfacts.org/search?' + new URLSearchParams({
-    q: term, page_size: '25',
+    q, page_size: '25',
     fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments',
   });
   const data = await fetchViaProxies(url, 9000);
