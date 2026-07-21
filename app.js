@@ -18,6 +18,13 @@ let log = load(LS.log, []);                // deníkové záznamy
 let settings = load(LS.settings, { kcal: 2000, prot: 100, carb: 250, fat: 65, waterGoal: 2000 });
 if (settings.waterGoal == null) settings.waterGoal = 2000;
 let profile = load(LS.profile, {});        // vstupy do kalkulačky cílů
+
+// Migrace: dřívější jednu „Svačina" (snack) přesuneme do Odpolední svačiny.
+(() => {
+  let changed = false;
+  log.forEach(e => { if (e.meal === 'snack') { e.meal = 'snack_pm'; changed = true; } });
+  if (changed) save(LS.log, log);
+})();
 let favorites = load(LS.favorites, []);    // oblíbená jídla (snapshoty)
 let weights = load(LS.weights, []);        // záznamy váhy [{date, kg}]
 let water = load(LS.water, {});            // pitný režim { 'YYYY-MM-DD': ml }
@@ -50,9 +57,10 @@ function dateHuman(key) {
 /* ---------- Pomocné výpočty ---------- */
 const MEALS = [
   { id: 'breakfast', label: 'Snídaně' },
+  { id: 'snack_am', label: 'Dopolední svačina' },
   { id: 'lunch', label: 'Oběd' },
+  { id: 'snack_pm', label: 'Odpolední svačina' },
   { id: 'dinner', label: 'Večeře' },
-  { id: 'snack', label: 'Svačina' },
 ];
 const r0 = n => Math.round(n || 0);
 const r1 = n => Math.round((n || 0) * 10) / 10;
@@ -156,11 +164,11 @@ function openSheet(id) { $(id).classList.remove('hidden'); }
 function closeSheet(id) { $(id).classList.add('hidden'); }
 
 /* ---------- Přidání jídla (výběr → gramáž) ---------- */
-let pendingMeal = 'snack';
+let pendingMeal = 'snack_pm';
 let pendingFood = null; // {name, kcal100, prot100, carb100, fat100, source}
 
 function openAdd(meal) {
-  pendingMeal = meal || 'snack';
+  pendingMeal = meal || 'snack_pm';
   switchTab('search');
   $('searchResults').innerHTML = '';
   $('searchStatus').textContent = '';
@@ -1093,7 +1101,7 @@ $('foodDelete').addEventListener('click', deleteFood);
 
 $('newRecipe').addEventListener('click', () => { closeSheet('addSheet'); newRecipe(); });
 $('recipeBack').addEventListener('click', () => closeSheet('recipeSheet'));
-$('recipeAdd').addEventListener('click', () => { recipeMode = true; openAdd('snack'); });
+$('recipeAdd').addEventListener('click', () => { recipeMode = true; openAdd('snack_pm'); });
 $('recipeSave').addEventListener('click', saveRecipe);
 $('recipePortions').addEventListener('input', renderRecipe);
 $('recipeList').addEventListener('click', e => {
