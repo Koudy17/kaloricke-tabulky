@@ -271,11 +271,24 @@ async function fetchViaProxies(targetUrl, timeoutMs = 7000) {
 }
 
 async function offSearch(term) {
+  // 1) Vlastní proxy na Vercelu – rychlá a spolehlivá (když appka běží na Vercelu).
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch('/api/search?q=' + encodeURIComponent(term), { signal: ctrl.signal });
+    clearTimeout(to);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.hits)) return data.hits.map(offToFood).filter(Boolean);
+    }
+  } catch { /* vlastní proxy není k dispozici → zkusíme veřejné níže */ }
+
+  // 2) Záloha: veřejné CORS proxy na Search-a-licious (funguje i na GitHub Pages).
   const url = 'https://search.openfoodfacts.org/search?' + new URLSearchParams({
     q: term, page_size: '25',
     fields: 'code,product_name,product_name_cs,generic_name,brands,nutriments',
   });
-  const data = await fetchViaProxies(url);
+  const data = await fetchViaProxies(url, 9000);
   return (data.hits || []).map(offToFood).filter(Boolean);
 }
 async function offByBarcode(code) {
