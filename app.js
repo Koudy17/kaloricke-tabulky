@@ -230,14 +230,27 @@ function kcalFrom(n) {
   if (n['energy_100g'] != null) return +n['energy_100g'] / 4.184; // kJ → kcal
   return null;
 }
+// Název může být řetězec i (u Search-a-licious) objekt s jazyky; brands zase pole i řetězec.
+function pickName(p) {
+  const c = p.product_name || p.product_name_cs || p.generic_name || '';
+  if (typeof c === 'string') return c.trim();
+  if (c && typeof c === 'object') return String(c.cs || c.en || Object.values(c)[0] || '').trim();
+  return '';
+}
+function firstBrand(p) {
+  const b = p.brands;
+  if (!b) return '';
+  if (Array.isArray(b)) return String(b[0] || '').trim();
+  return String(b).split(',')[0].trim();
+}
 function offToFood(p) {
   const n = p.nutriments || {};
   const kcal = kcalFrom(n);
   if (kcal == null) return null;
-  let name = p.product_name || p.product_name_cs || p.generic_name || '';
-  name = name.trim();
+  let name = pickName(p);
   if (!name) return null;
-  if (p.brands) name += ` (${p.brands.split(',')[0].trim()})`;
+  const brand = firstBrand(p);
+  if (brand) name += ` (${brand})`;
   return {
     name,
     kcal100: r1(kcal),
