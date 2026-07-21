@@ -640,10 +640,57 @@ function applyCalc() {
   toast('Cíle nastaveny podle výpočtu');
 }
 
+/* ---------- Kalendář ---------- */
+let calYear, calMonth;
+const MONTHS_CS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+
+function openCalendar() {
+  const d = new Date(currentDate + 'T12:00:00');
+  calYear = d.getFullYear();
+  calMonth = d.getMonth();
+  renderCalendar();
+  openSheet('calendarSheet');
+}
+function calShiftMonth(delta) {
+  calMonth += delta;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+function renderCalendar() {
+  $('calMonthLabel').textContent = `${MONTHS_CS[calMonth]} ${calYear}`;
+  const grid = $('calGrid');
+  grid.innerHTML = '';
+  const datesWithLog = new Set(log.map(e => e.date));
+  const startIdx = (new Date(calYear, calMonth, 1).getDay() + 6) % 7; // pondělní start
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = todayKey();
+  for (let i = 0; i < startIdx; i++) {
+    const b = document.createElement('div');
+    b.className = 'cal-day blank';
+    grid.appendChild(b);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const b = document.createElement('button');
+    b.className = 'cal-day';
+    if (key === today) b.classList.add('today');
+    if (key === currentDate) b.classList.add('selected');
+    if (key > today) b.classList.add('future');
+    b.innerHTML = `${day}${datesWithLog.has(key) ? '<span class="dot"></span>' : ''}`;
+    b.addEventListener('click', () => { currentDate = key; renderDay(); closeSheet('calendarSheet'); });
+    grid.appendChild(b);
+  }
+}
+
 /* ---------- Události ---------- */
 $('prevDay').addEventListener('click', () => shiftDate(-1));
 $('nextDay').addEventListener('click', () => shiftDate(1));
-$('dayLabel').addEventListener('click', () => { currentDate = todayKey(); renderDay(); });
+$('dayLabel').addEventListener('click', openCalendar);
+$('calendarBack').addEventListener('click', () => closeSheet('calendarSheet'));
+$('calPrev').addEventListener('click', () => calShiftMonth(-1));
+$('calNext').addEventListener('click', () => calShiftMonth(1));
+$('calToday').addEventListener('click', () => { currentDate = todayKey(); renderDay(); closeSheet('calendarSheet'); });
 $('openSettings').addEventListener('click', openSettings);
 
 $('meals').addEventListener('click', e => {

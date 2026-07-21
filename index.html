@@ -224,6 +224,29 @@
     </div>
   </div>
 
+  <!-- Kalendář -->
+  <div id="calendarSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="calendarBack" class="linkbtn">Zavřít</button>
+        <strong>Kalendář</strong>
+        <button id="calToday" class="linkbtn" style="text-align:right">Dnes</button>
+      </div>
+      <div class="cal-body">
+        <div class="cal-nav">
+          <button id="calPrev" class="iconbtn dark" aria-label="Předchozí měsíc">‹</button>
+          <strong id="calMonthLabel">—</strong>
+          <button id="calNext" class="iconbtn dark" aria-label="Další měsíc">›</button>
+        </div>
+        <div class="cal-week">
+          <span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span>
+        </div>
+        <div id="calGrid" class="cal-grid"></div>
+        <p class="hint small" style="text-align:center">Tečka = den, kam sis něco zapsal.</p>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
 
   <script src="app.js"></script>
