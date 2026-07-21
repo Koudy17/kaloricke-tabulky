@@ -202,6 +202,27 @@ function savePortion() {
 }
 
 /* ---------- OpenFoodFacts ---------- */
+// Vyhledávací server OFF občas vrátí odpověď bez CORS hlaviček (náhodně ~1/3).
+// Proto každý dotaz zkusíme víckrát po sobě s krátkou pauzou + timeout.
+async function fetchJson(url, { tries = 4, timeoutMs = 8000 } = {}) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(to);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      clearTimeout(to);
+      lastErr = e;
+      if (i < tries - 1) await new Promise(r => setTimeout(r, 350 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 function kcalFrom(n) {
   if (!n) return null;
   if (n['energy-kcal_100g'] != null) return +n['energy-kcal_100g'];
@@ -231,17 +252,13 @@ async function offSearch(term) {
     search_terms: term, page_size: '25', sort_by: 'popularity_key',
     fields: 'product_name,product_name_cs,generic_name,brands,nutriments',
   });
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
+  const data = await fetchJson(url, { tries: 4 });
   return (data.products || []).map(offToFood).filter(Boolean);
 }
 async function offByBarcode(code) {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?` +
     'fields=product_name,product_name_cs,generic_name,brands,nutriments';
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
+  const data = await fetchJson(url, { tries: 3 });
   if (data.status !== 1 || !data.product) return null;
   return offToFood(data.product);
 }
@@ -264,7 +281,10 @@ async function doSearch() {
     renderResults($('searchResults'), items);
   } catch (err) {
     if (seq !== searchSeq) return;
-    $('searchStatus').textContent = 'Chyba připojení. Zkontroluj internet a zkus to znovu.';
+    $('searchStatus').innerHTML = 'Databáze právě neodpovídá (občas zlobí). ' +
+      '<button id="retrySearch" class="linkbtn" style="min-width:0">Zkusit znovu</button>';
+    const rb = $('retrySearch');
+    if (rb) rb.addEventListener('click', doSearch);
   }
 }
 function renderResults(container, items) {
