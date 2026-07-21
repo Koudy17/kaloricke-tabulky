@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>Kalorické tabulky</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Denní přehled -->
+  <header class="topbar">
+    <button id="prevDay" class="iconbtn" aria-label="Předchozí den">‹</button>
+    <button id="dayLabel" class="daylabel">Dnes</button>
+    <button id="nextDay" class="iconbtn" aria-label="Další den">›</button>
+    <button id="openSettings" class="iconbtn settings" aria-label="Nastavení">⚙</button>
+  </header>
+
+  <main id="dayView">
+    <section class="summary card">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 120 120" class="ring">
+          <circle class="ring-bg" cx="60" cy="60" r="52" />
+          <circle id="ringProgress" class="ring-fg" cx="60" cy="60" r="52" />
+        </svg>
+        <div class="ring-center">
+          <div id="kcalNow" class="kcal-now">0</div>
+          <div class="kcal-goal">z <span id="kcalGoal">2000</span> kcal</div>
+        </div>
+      </div>
+      <div class="macros">
+        <div class="macro">
+          <div class="macro-top"><span>Bílkoviny</span><span id="pVal">0 / 0 g</span></div>
+          <div class="bar"><div id="pBar" class="bar-fill p"></div></div>
+        </div>
+        <div class="macro">
+          <div class="macro-top"><span>Sacharidy</span><span id="cVal">0 / 0 g</span></div>
+          <div class="bar"><div id="cBar" class="bar-fill c"></div></div>
+        </div>
+        <div class="macro">
+          <div class="macro-top"><span>Tuky</span><span id="fVal">0 / 0 g</span></div>
+          <div class="bar"><div id="fBar" class="bar-fill f"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <div id="meals"></div>
+  </main>
+
+  <!-- Přidat jídlo -->
+  <div id="addSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="addBack" class="linkbtn">Zavřít</button>
+        <strong id="addTitle">Přidat jídlo</strong>
+        <span style="width:56px"></span>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="search">Vyhledat</button>
+        <button class="tab" data-tab="scan">Sken</button>
+        <button class="tab" data-tab="custom">Vlastní</button>
+      </div>
+
+      <!-- Vyhledat -->
+      <div class="tabpane" data-pane="search">
+        <div class="searchrow">
+          <input id="searchInput" type="search" placeholder="Např. tvaroh, rohlík, jogurt…" autocomplete="off" />
+          <button id="searchBtn" class="primary sm">Hledat</button>
+        </div>
+        <div id="searchStatus" class="status"></div>
+        <div id="searchResults" class="results"></div>
+      </div>
+
+      <!-- Sken -->
+      <div class="tabpane hidden" data-pane="scan">
+        <div id="scanArea">
+          <video id="scanVideo" playsinline muted></video>
+          <div class="scan-hint">Namiř foťák na čárový kód</div>
+        </div>
+        <div id="scanStatus" class="status"></div>
+        <button id="scanStart" class="primary">Spustit skener</button>
+      </div>
+
+      <!-- Vlastní -->
+      <div class="tabpane hidden" data-pane="custom">
+        <button id="newCustom" class="primary">+ Nové vlastní jídlo</button>
+        <div id="customList" class="results"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail / zadání gramáže -->
+  <div id="portionSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="portionBack" class="linkbtn">Zpět</button>
+        <strong>Množství</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <div id="portionName" class="portion-name"></div>
+        <div id="portionPer100" class="portion-per100"></div>
+        <label class="field">
+          <span>Množství (g)</span>
+          <input id="portionGrams" type="number" inputmode="decimal" min="0" step="1" value="100" />
+        </label>
+        <label class="field">
+          <span>Jídlo dne</span>
+          <select id="portionMeal">
+            <option value="breakfast">Snídaně</option>
+            <option value="lunch">Oběd</option>
+            <option value="dinner">Večeře</option>
+            <option value="snack">Svačina</option>
+          </select>
+        </label>
+        <div id="portionPreview" class="portion-preview"></div>
+        <button id="portionSave" class="primary big">Přidat do deníku</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editace vlastního jídla -->
+  <div id="foodSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="foodBack" class="linkbtn">Zpět</button>
+        <strong id="foodEditTitle">Vlastní jídlo</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <p class="hint">Hodnoty zadej na <strong>100 g</strong> (nebo 100 ml).</p>
+        <label class="field"><span>Název</span><input id="fName" type="text" placeholder="Např. Babiččin guláš" /></label>
+        <label class="field"><span>Energie (kcal / 100 g)</span><input id="fKcal" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Bílkoviny (g / 100 g)</span><input id="fProt" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Sacharidy (g / 100 g)</span><input id="fCarb" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Tuky (g / 100 g)</span><input id="fFat" type="number" inputmode="decimal" min="0" /></label>
+        <button id="foodSave" class="primary big">Uložit jídlo</button>
+        <button id="foodDelete" class="danger hidden">Smazat jídlo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nastavení -->
+  <div id="settingsSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="settingsBack" class="linkbtn">Zavřít</button>
+        <strong>Nastavení</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <p class="hint">Denní cíle. Makra si můžeš dopočítat sám, nebo nech tak.</p>
+        <label class="field"><span>Cíl energie (kcal)</span><input id="sKcal" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Bílkoviny (g)</span><input id="sProt" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Sacharidy (g)</span><input id="sCarb" type="number" inputmode="decimal" min="0" /></label>
+        <label class="field"><span>Tuky (g)</span><input id="sFat" type="number" inputmode="decimal" min="0" /></label>
+        <button id="settingsSave" class="primary big">Uložit</button>
+        <hr class="sep" />
+        <button id="exportData" class="ghost">Zálohovat data (export)</button>
+        <button id="importData" class="ghost">Obnovit ze zálohy (import)</button>
+        <input id="importFile" type="file" accept="application/json" class="hidden" />
+        <p class="hint small">Data jsou uložená jen v tomhle prohlížeči. Záloha se hodí před vymazáním historie nebo přenosem na jiný telefon.</p>
+        <p class="hint small">Data jídel z <a href="https://openfoodfacts.org" target="_blank" rel="noopener">OpenFoodFacts</a> (licence ODbL).</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

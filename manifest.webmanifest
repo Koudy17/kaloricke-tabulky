@@ -1,0 +1,15 @@
+{
+  "name": "Kalorické tabulky",
+  "short_name": "Kalorie",
+  "description": "Jednoduchý počítač kalorií a maker — vyhledávání z OpenFoodFacts, čárové kódy, vlastní jídla. Data zůstávají v telefonu.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f5f7",
+  "theme_color": "#16a34a",
+  "lang": "cs",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
