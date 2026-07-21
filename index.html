@@ -155,7 +155,8 @@
         <span style="width:56px"></span>
       </div>
       <div class="portion-body">
-        <p class="hint">Denní cíle. Makra si můžeš dopočítat sám, nebo nech tak.</p>
+        <button id="openCalc" class="primary big" style="margin-top:0">🎯 Spočítat cíle z váhy</button>
+        <p class="hint" style="margin-top:14px">Denní cíle. Spočítej si je z váhy tlačítkem nahoře, nebo vyplň ručně.</p>
         <label class="field"><span>Cíl energie (kcal)</span><input id="sKcal" type="number" inputmode="decimal" min="0" /></label>
         <label class="field"><span>Bílkoviny (g)</span><input id="sProt" type="number" inputmode="decimal" min="0" /></label>
         <label class="field"><span>Sacharidy (g)</span><input id="sCarb" type="number" inputmode="decimal" min="0" /></label>
@@ -167,6 +168,58 @@
         <input id="importFile" type="file" accept="application/json" class="hidden" />
         <p class="hint small">Data jsou uložená jen v tomhle prohlížeči. Záloha se hodí před vymazáním historie nebo přenosem na jiný telefon.</p>
         <p class="hint small">Data jídel z <a href="https://openfoodfacts.org" target="_blank" rel="noopener">OpenFoodFacts</a> (licence ODbL).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kalkulačka cílů -->
+  <div id="calcSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="calcBack" class="linkbtn">Zpět</button>
+        <strong>Výpočet cílů</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <p class="hint">Vyplň pár údajů a appka spočítá denní kalorie a makra pro hubnutí.</p>
+
+        <div class="seg" id="cSex">
+          <button type="button" class="seg-btn active" data-sex="male">Muž</button>
+          <button type="button" class="seg-btn" data-sex="female">Žena</button>
+        </div>
+
+        <div class="row2">
+          <label class="field"><span>Věk</span><input id="cAge" type="number" inputmode="numeric" min="14" max="100" placeholder="let" /></label>
+          <label class="field"><span>Výška (cm)</span><input id="cHeight" type="number" inputmode="decimal" min="120" max="230" placeholder="cm" /></label>
+        </div>
+        <div class="row2">
+          <label class="field"><span>Aktuální váha (kg)</span><input id="cWeight" type="number" inputmode="decimal" min="35" max="300" placeholder="kg" /></label>
+          <label class="field"><span>Cílová váha (kg)</span><input id="cTarget" type="number" inputmode="decimal" min="35" max="300" placeholder="kg" /></label>
+        </div>
+
+        <label class="field"><span>Jak jsi aktivní?</span>
+          <select id="cActivity">
+            <option value="1.2">Sedavý (málo pohybu)</option>
+            <option value="1.375" selected>Lehká aktivita (1–3× týdně)</option>
+            <option value="1.55">Střední (3–5× týdně)</option>
+            <option value="1.725">Vysoká (6–7× týdně)</option>
+            <option value="1.9">Velmi vysoká (těžká práce/sport)</option>
+          </select>
+        </label>
+        <label class="field"><span>Tempo hubnutí</span>
+          <select id="cRate">
+            <option value="0.25">Mírné (~0,25 kg/týden)</option>
+            <option value="0.5" selected>Střední (~0,5 kg/týden)</option>
+            <option value="0.75">Rychlejší (~0,75 kg/týden)</option>
+          </select>
+        </label>
+
+        <button id="calcRun" class="primary big">Spočítat</button>
+
+        <div id="calcResult" class="calc-result hidden"></div>
+        <button id="calcApply" class="primary big hidden">Použít jako denní cíle</button>
+
+        <p class="hint small">⚠️ Orientační odhad (vzorec Mifflin–St Jeor). Nenahrazuje radu lékaře ani nutričního terapeuta — u výraznějšího hubnutí nebo zdravotních potíží se poraď s odborníkem.</p>
       </div>
     </div>
   </div>

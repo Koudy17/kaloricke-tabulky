@@ -5,6 +5,7 @@ const LS = {
   foods: 'kt_foods',
   log: 'kt_log',
   settings: 'kt_settings',
+  profile: 'kt_profile',
 };
 const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -12,6 +13,7 @@ const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 let foods = load(LS.foods, []);            // vlastní jídla
 let log = load(LS.log, []);                // deníkové záznamy
 let settings = load(LS.settings, { kcal: 2000, prot: 100, carb: 250, fat: 65 });
+let profile = load(LS.profile, {});        // vstupy do kalkulačky cílů
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -512,7 +514,7 @@ function saveSettings() {
   toast('Nastavení uloženo');
 }
 function exportData() {
-  const blob = new Blob([JSON.stringify({ foods, log, settings, v: 1 }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ foods, log, settings, profile, v: 1 }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `kaloricke-tabulky-zaloha-${todayKey()}.json`;
@@ -528,7 +530,8 @@ function importData(file) {
       foods = Array.isArray(d.foods) ? d.foods : [];
       log = d.log;
       settings = d.settings || settings;
-      save(LS.foods, foods); save(LS.log, log); save(LS.settings, settings);
+      profile = d.profile || profile;
+      save(LS.foods, foods); save(LS.log, log); save(LS.settings, settings); save(LS.profile, profile);
       closeSheet('settingsSheet');
       renderDay();
       toast('Data obnovena ze zálohy');
@@ -537,6 +540,104 @@ function importData(file) {
     }
   };
   reader.readAsText(file);
+}
+
+/* ---------- Kalkulačka cílů ---------- */
+let calcSex = 'male';
+let calcGoals = null;
+
+function openCalc() {
+  calcSex = profile.sex || 'male';
+  document.querySelectorAll('#cSex .seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.sex === calcSex));
+  $('cAge').value = profile.age || '';
+  $('cHeight').value = profile.height || '';
+  $('cWeight').value = profile.weight || '';
+  $('cTarget').value = profile.target || '';
+  if (profile.activity) $('cActivity').value = profile.activity;
+  if (profile.rate) $('cRate').value = profile.rate;
+  $('calcResult').classList.add('hidden');
+  $('calcApply').classList.add('hidden');
+  calcGoals = null;
+  openSheet('calcSheet');
+}
+
+// Mifflin–St Jeor → BMR, × aktivita → TDEE, − deficit → cíl. Makra: B/T dle váhy, S zbytek.
+function computeGoals(p) {
+  const bmr = p.sex === 'female'
+    ? 10 * p.weight + 6.25 * p.height - 5 * p.age - 161
+    : 10 * p.weight + 6.25 * p.height - 5 * p.age + 5;
+  const tdee = bmr * p.activity;
+
+  const losing = p.target < p.weight;
+  const deficit = losing ? p.rate * 7700 / 7 : 0; // 1 kg tuku ≈ 7700 kcal
+  let kcal = tdee - deficit;
+
+  // Bezpečnostní podlaha: nikdy pod BMR ani pod bezpečné minimum.
+  const floor = p.sex === 'female' ? 1200 : 1500;
+  const minKcal = Math.max(floor, Math.round(bmr));
+  let capped = false;
+  if (kcal < minKcal) { kcal = minKcal; capped = true; }
+  kcal = Math.round(kcal / 10) * 10;
+
+  // Makra: bílkoviny 1,6 g/kg, tuky 0,8 g/kg, sacharidy dopočet.
+  let prot = Math.round(1.6 * p.weight);
+  let fat = Math.round(0.8 * p.weight);
+  let carbKcal = kcal - prot * 4 - fat * 9;
+  if (carbKcal < 200) { fat = Math.round(0.6 * p.weight); carbKcal = kcal - prot * 4 - fat * 9; }
+  if (carbKcal < 0) { prot = Math.max(Math.round(kcal * 0.35 / 4), 0); carbKcal = kcal - prot * 4 - fat * 9; }
+  const carb = Math.max(Math.round(carbKcal / 4), 0);
+
+  const weeks = losing ? Math.round((p.weight - p.target) / p.rate) : 0;
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), deficit: Math.round(deficit), kcal, prot, carb, fat, capped, minKcal, losing, weeks };
+}
+
+function runCalc() {
+  const p = {
+    sex: calcSex,
+    age: parseFloat($('cAge').value),
+    height: parseFloat($('cHeight').value),
+    weight: parseFloat($('cWeight').value),
+    target: parseFloat($('cTarget').value),
+    activity: parseFloat($('cActivity').value),
+    rate: parseFloat($('cRate').value),
+  };
+  if (!(p.age >= 14 && p.age <= 100)) { toast('Zadej věk (14–100)'); return; }
+  if (!(p.height >= 120 && p.height <= 230)) { toast('Zadej výšku v cm (120–230)'); return; }
+  if (!(p.weight >= 35 && p.weight <= 300)) { toast('Zadej aktuální váhu (35–300 kg)'); return; }
+  if (!(p.target >= 35 && p.target <= 300)) { toast('Zadej cílovou váhu (35–300 kg)'); return; }
+
+  profile = p;
+  save(LS.profile, profile);
+
+  const g = computeGoals(p);
+  calcGoals = g;
+
+  $('calcResult').innerHTML =
+    `<div class="big-kcal">${g.kcal} kcal<small>doporučený denní cíl energie</small></div>
+     <div class="calc-macros">
+       <div class="calc-macro p"><div class="cm-val">${g.prot} g</div><div class="cm-lab">Bílkoviny</div></div>
+       <div class="calc-macro c"><div class="cm-val">${g.carb} g</div><div class="cm-lab">Sacharidy</div></div>
+       <div class="calc-macro f"><div class="cm-val">${g.fat} g</div><div class="cm-lab">Tuky</div></div>
+     </div>
+     <div class="calc-note">Udržovací příjem ~${g.tdee} kcal` +
+       (g.losing ? ` · deficit ~${g.deficit} kcal/den · cíl za ~${g.weeks} týd.` : ' · cílová váha není nižší → počítám udržení') +
+     `</div>` +
+     (g.capped ? `<div class="calc-warn">Pro bezpečí jsme cíl nezvedli/nesnížili pod ${g.minKcal} kcal — nižší příjem už se nedoporučuje. Zpomal tempo, nebo přidej pohyb.</div>` : '');
+  $('calcResult').classList.remove('hidden');
+  $('calcApply').classList.remove('hidden');
+}
+
+function applyCalc() {
+  if (!calcGoals) return;
+  settings = { kcal: calcGoals.kcal, prot: calcGoals.prot, carb: calcGoals.carb, fat: calcGoals.fat };
+  save(LS.settings, settings);
+  // promítnout i do políček v Nastavení
+  $('sKcal').value = settings.kcal; $('sProt').value = settings.prot;
+  $('sCarb').value = settings.carb; $('sFat').value = settings.fat;
+  closeSheet('calcSheet');
+  renderDay();
+  toast('Cíle nastaveny podle výpočtu');
 }
 
 /* ---------- Události ---------- */
@@ -578,6 +679,15 @@ $('settingsSave').addEventListener('click', saveSettings);
 $('exportData').addEventListener('click', exportData);
 $('importData').addEventListener('click', () => $('importFile').click());
 $('importFile').addEventListener('change', e => { if (e.target.files[0]) importData(e.target.files[0]); });
+
+$('openCalc').addEventListener('click', openCalc);
+$('calcBack').addEventListener('click', () => closeSheet('calcSheet'));
+$('calcRun').addEventListener('click', runCalc);
+$('calcApply').addEventListener('click', applyCalc);
+document.querySelectorAll('#cSex .seg-btn').forEach(b => b.addEventListener('click', () => {
+  calcSex = b.dataset.sex;
+  document.querySelectorAll('#cSex .seg-btn').forEach(x => x.classList.toggle('active', x === b));
+}));
 
 // Klepnutí na tmavé pozadí sheetu = zavřít
 document.querySelectorAll('.sheet').forEach(s => {
