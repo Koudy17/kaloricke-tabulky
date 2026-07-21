@@ -65,6 +65,8 @@
         <button class="water-btn" data-water="500">+500 ml</button>
       </div>
     </section>
+
+    <button id="copyDayBtn" class="ghost" style="margin-top:0">⧉ Zkopírovat jídla z jiného dne</button>
   </main>
 
   <!-- Přidat jídlo -->
@@ -128,6 +130,7 @@
       <!-- Vlastní -->
       <div class="tabpane hidden" data-pane="custom">
         <button id="newCustom" class="primary">+ Nové vlastní jídlo</button>
+        <button id="newRecipe" class="ghost" style="margin-top:8px">🍲 Složit z surovin (recept)</button>
         <div id="customList" class="results"></div>
       </div>
     </div>
@@ -236,11 +239,17 @@
         <span style="width:56px"></span>
       </div>
       <div class="portion-body">
-        <p class="hint">Vyplň pár údajů a appka spočítá denní kalorie a makra pro hubnutí.</p>
+        <p class="hint">Vyplň pár údajů a appka spočítá denní kalorie a makra.</p>
 
         <div class="seg" id="cSex">
           <button type="button" class="seg-btn active" data-sex="male">Muž</button>
           <button type="button" class="seg-btn" data-sex="female">Žena</button>
+        </div>
+
+        <div class="seg" id="cGoal">
+          <button type="button" class="seg-btn active" data-goal="lose">Zhubnout</button>
+          <button type="button" class="seg-btn" data-goal="maintain">Udržet</button>
+          <button type="button" class="seg-btn" data-goal="gain">Nabrat</button>
         </div>
 
         <div class="row2">
@@ -261,7 +270,7 @@
             <option value="1.9">Velmi vysoká (těžká práce/sport)</option>
           </select>
         </label>
-        <label class="field"><span>Tempo hubnutí</span>
+        <label class="field" id="cRateWrap"><span id="cRateLabel">Tempo hubnutí</span>
           <select id="cRate">
             <option value="0.25">Mírné (~0,25 kg/týden)</option>
             <option value="0.5" selected>Střední (~0,5 kg/týden)</option>
@@ -284,7 +293,7 @@
     <div class="sheet-inner">
       <div class="sheet-head">
         <button id="calendarBack" class="linkbtn">Zavřít</button>
-        <strong>Kalendář</strong>
+        <strong id="calTitle">Kalendář</strong>
         <button id="calToday" class="linkbtn" style="text-align:right">Dnes</button>
       </div>
       <div class="cal-body">
@@ -333,6 +342,26 @@
         <div id="overviewStats" class="ov-stats"></div>
         <div id="overviewChart" class="ov-chart"></div>
         <p class="hint small" style="text-align:center">Posledních 7 dní · sloupec = příjem, čára = cíl</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recept z více surovin -->
+  <div id="recipeSheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <button id="recipeBack" class="linkbtn">Zavřít</button>
+        <strong>Nový recept</strong>
+        <span style="width:56px"></span>
+      </div>
+      <div class="portion-body">
+        <p class="hint">Poskládej jídlo ze surovin — appka spočítá hodnoty a uloží ho jako vlastní jídlo.</p>
+        <label class="field"><span>Název jídla</span><input id="recipeName" type="text" placeholder="Např. Domácí lasagne" /></label>
+        <button id="recipeAdd" class="primary">+ Přidat surovinu</button>
+        <div id="recipeList" class="weight-list"></div>
+        <label class="field" style="margin-top:12px"><span>Počet porcí</span><input id="recipePortions" type="number" inputmode="numeric" min="1" step="1" value="1" /></label>
+        <div id="recipeTotals" class="portion-preview"></div>
+        <button id="recipeSave" class="primary big">Uložit jako jídlo</button>
       </div>
     </div>
   </div>

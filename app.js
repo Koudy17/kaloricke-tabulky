@@ -311,6 +311,17 @@ function syncPortionChips() {
 function savePortion() {
   const g = parseFloat($('portionGrams').value);
   if (!g || g <= 0) { toast('Zadej množství v gramech'); return; }
+  // Přidávání suroviny do rozpracovaného receptu.
+  if (recipeMode) {
+    recipeItems.push({ ...foodSnapshot(pendingFood), grams: g });
+    recipeMode = false;
+    closeSheet('portionSheet');
+    closeSheet('addSheet');
+    renderRecipe();
+    openSheet('recipeSheet');
+    toast('Surovina přidána');
+    return;
+  }
   const meal = $('portionMeal').value;
   const editing = !!editingEntryId;
   if (editing) {
@@ -632,6 +643,57 @@ function deleteFood() {
   toast('Smazáno');
 }
 
+/* ---------- Recept z více surovin ---------- */
+let recipeMode = false;
+let recipeItems = [];
+function newRecipe() {
+  recipeItems = [];
+  $('recipeName').value = '';
+  $('recipePortions').value = 1;
+  renderRecipe();
+  openSheet('recipeSheet');
+}
+function recipeTotals() {
+  return recipeItems.reduce((a, it) => {
+    const f = it.grams / 100;
+    a.g += it.grams; a.kcal += it.kcal100 * f; a.prot += it.prot100 * f; a.carb += it.carb100 * f; a.fat += it.fat100 * f;
+    return a;
+  }, { g: 0, kcal: 0, prot: 0, carb: 0, fat: 0 });
+}
+function renderRecipe() {
+  const list = $('recipeList');
+  list.innerHTML = '';
+  recipeItems.forEach((it, idx) => {
+    const row = document.createElement('div');
+    row.className = 'wl-row';
+    row.innerHTML = `<span>${esc(it.name)} · ${r0(it.grams)} g</span><span class="wl-kg">${r0(it.kcal100 * it.grams / 100)} kcal</span><button class="entry-del" data-ridel="${idx}" aria-label="Odebrat">×</button>`;
+    list.appendChild(row);
+  });
+  const t = recipeTotals();
+  const portions = Math.max(parseFloat($('recipePortions').value) || 1, 1);
+  $('recipeTotals').innerHTML = recipeItems.length
+    ? `Celkem: <b>${r0(t.g)} g</b> · <b>${r0(t.kcal)}</b> kcal · B ${r1(t.prot)} · S ${r1(t.carb)} · T ${r1(t.fat)}<br>` +
+      `Na porci (~${r0(t.g / portions)} g): <b>${r0(t.kcal / portions)}</b> kcal`
+    : 'Zatím žádná surovina — klepni na „+ Přidat surovinu".';
+}
+function saveRecipe() {
+  if (!recipeItems.length) { toast('Přidej aspoň jednu surovinu'); return; }
+  const name = $('recipeName').value.trim();
+  if (!name) { toast('Zadej název jídla'); return; }
+  const t = recipeTotals();
+  if (t.g <= 0) { toast('Suroviny nemají hmotnost'); return; }
+  const per = 100 / t.g; // hodnoty na 100 g celého jídla
+  foods.unshift({
+    id: uid(), name,
+    kcal100: r1(t.kcal * per), prot100: r1(t.prot * per),
+    carb100: r1(t.carb * per), fat100: r1(t.fat * per),
+  });
+  save(LS.foods, foods);
+  closeSheet('recipeSheet');
+  renderCustomList();
+  toast('Recept uložen mezi vlastní jídla');
+}
+
 /* ---------- Nastavení + záloha ---------- */
 function openSettings() {
   $('sKcal').value = settings.kcal;
@@ -689,12 +751,22 @@ function importData(file) {
 
 /* ---------- Kalkulačka cílů ---------- */
 let calcSex = 'male';
+let calcGoalType = 'lose';
 let calcGoals = null;
 
+function setCalcGoalUI() {
+  const lbl = { lose: 'Tempo hubnutí', gain: 'Tempo nabírání', maintain: '' }[calcGoalType];
+  $('cRateWrap').classList.toggle('hidden', calcGoalType === 'maintain');
+  if (lbl) $('cRateLabel').textContent = lbl;
+}
 function openCalc() {
   calcSex = profile.sex || 'male';
+  calcGoalType = profile.goalType || 'lose';
   document.querySelectorAll('#cSex .seg-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.sex === calcSex));
+  document.querySelectorAll('#cGoal .seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.goal === calcGoalType));
+  setCalcGoalUI();
   $('cAge').value = profile.age || '';
   $('cHeight').value = profile.height || '';
   $('cWeight').value = profile.weight || '';
@@ -707,16 +779,18 @@ function openCalc() {
   openSheet('calcSheet');
 }
 
-// Mifflin–St Jeor → BMR, × aktivita → TDEE, − deficit → cíl. Makra: B/T dle váhy, S zbytek.
+// Mifflin–St Jeor → BMR, × aktivita → TDEE, ± deficit/přebytek → cíl. Makra: B/T dle váhy, S zbytek.
 function computeGoals(p) {
   const bmr = p.sex === 'female'
     ? 10 * p.weight + 6.25 * p.height - 5 * p.age - 161
     : 10 * p.weight + 6.25 * p.height - 5 * p.age + 5;
   const tdee = bmr * p.activity;
 
-  const losing = p.target < p.weight;
-  const deficit = losing ? p.rate * 7700 / 7 : 0; // 1 kg tuku ≈ 7700 kcal
-  let kcal = tdee - deficit;
+  const change = p.rate * 7700 / 7; // kcal/den pro dané tempo (1 kg ≈ 7700 kcal)
+  let kcal = tdee;
+  let deficit = 0, surplus = 0;
+  if (p.goalType === 'lose') { deficit = change; kcal = tdee - deficit; }
+  else if (p.goalType === 'gain') { surplus = change; kcal = tdee + surplus; }
 
   // Bezpečnostní podlaha: nikdy pod BMR ani pod bezpečné minimum.
   const floor = p.sex === 'female' ? 1200 : 1500;
@@ -733,13 +807,15 @@ function computeGoals(p) {
   if (carbKcal < 0) { prot = Math.max(Math.round(kcal * 0.35 / 4), 0); carbKcal = kcal - prot * 4 - fat * 9; }
   const carb = Math.max(Math.round(carbKcal / 4), 0);
 
-  const weeks = losing ? Math.round((p.weight - p.target) / p.rate) : 0;
-  return { bmr: Math.round(bmr), tdee: Math.round(tdee), deficit: Math.round(deficit), kcal, prot, carb, fat, capped, minKcal, losing, weeks };
+  const target = p.target || p.weight;
+  const weeks = (p.goalType !== 'maintain' && p.rate) ? Math.round(Math.abs(p.weight - target) / p.rate) : 0;
+  return { bmr: Math.round(bmr), tdee: Math.round(tdee), deficit: Math.round(deficit), surplus: Math.round(surplus), kcal, prot, carb, fat, capped, minKcal, goalType: p.goalType, weeks };
 }
 
 function runCalc() {
   const p = {
     sex: calcSex,
+    goalType: calcGoalType,
     age: parseFloat($('cAge').value),
     height: parseFloat($('cHeight').value),
     weight: parseFloat($('cWeight').value),
@@ -750,13 +826,18 @@ function runCalc() {
   if (!(p.age >= 14 && p.age <= 100)) { toast('Zadej věk (14–100)'); return; }
   if (!(p.height >= 120 && p.height <= 230)) { toast('Zadej výšku v cm (120–230)'); return; }
   if (!(p.weight >= 35 && p.weight <= 300)) { toast('Zadej aktuální váhu (35–300 kg)'); return; }
-  if (!(p.target >= 35 && p.target <= 300)) { toast('Zadej cílovou váhu (35–300 kg)'); return; }
+  if (p.goalType !== 'maintain' && !(p.target >= 35 && p.target <= 300)) { toast('Zadej cílovou váhu (35–300 kg)'); return; }
 
   profile = p;
   save(LS.profile, profile);
 
   const g = computeGoals(p);
   calcGoals = g;
+
+  let note = `Udržovací příjem ~${g.tdee} kcal`;
+  if (g.goalType === 'lose') note += ` · deficit ~${g.deficit} kcal/den` + (g.weeks ? ` · cíl za ~${g.weeks} týd.` : '');
+  else if (g.goalType === 'gain') note += ` · přebytek ~${g.surplus} kcal/den` + (g.weeks ? ` · cíl za ~${g.weeks} týd.` : '');
+  else note += ' · udržovací režim';
 
   $('calcResult').innerHTML =
     `<div class="big-kcal">${g.kcal} kcal<small>doporučený denní cíl energie</small></div>
@@ -765,10 +846,8 @@ function runCalc() {
        <div class="calc-macro c"><div class="cm-val">${g.carb} g</div><div class="cm-lab">Sacharidy</div></div>
        <div class="calc-macro f"><div class="cm-val">${g.fat} g</div><div class="cm-lab">Tuky</div></div>
      </div>
-     <div class="calc-note">Udržovací příjem ~${g.tdee} kcal` +
-       (g.losing ? ` · deficit ~${g.deficit} kcal/den · cíl za ~${g.weeks} týd.` : ' · cílová váha není nižší → počítám udržení') +
-     `</div>` +
-     (g.capped ? `<div class="calc-warn">Pro bezpečí jsme cíl nezvedli/nesnížili pod ${g.minKcal} kcal — nižší příjem už se nedoporučuje. Zpomal tempo, nebo přidej pohyb.</div>` : '');
+     <div class="calc-note">${note}</div>` +
+     (g.capped ? `<div class="calc-warn">Pro bezpečí jsme cíl nesnížili pod ${g.minKcal} kcal — nižší příjem už se nedoporučuje. Zpomal tempo, nebo přidej pohyb.</div>` : '');
   $('calcResult').classList.remove('hidden');
   $('calcApply').classList.remove('hidden');
 }
@@ -892,12 +971,24 @@ function renderOverview() {
 let calYear, calMonth;
 const MONTHS_CS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
 
-function openCalendar() {
+let calMode = 'nav';
+function openCalendar(mode) {
+  calMode = mode === 'copy' ? 'copy' : 'nav';
+  $('calTitle').textContent = calMode === 'copy' ? 'Odkud zkopírovat?' : 'Kalendář';
   const d = new Date(currentDate + 'T12:00:00');
   calYear = d.getFullYear();
   calMonth = d.getMonth();
   renderCalendar();
   openSheet('calendarSheet');
+}
+// Zkopíruje jídla z jiného dne do aktuálního.
+function copyDayEntries(sourceKey) {
+  const src = log.filter(e => e.date === sourceKey);
+  if (!src.length) { toast('V ten den nic nebylo'); return; }
+  src.forEach(e => log.push({ ...e, id: uid(), date: currentDate }));
+  save(LS.log, log);
+  renderDay();
+  toast(`Zkopírováno ${src.length} položek z ${dateHuman(sourceKey)}`);
 }
 function calShiftMonth(delta) {
   calMonth += delta;
@@ -926,7 +1017,17 @@ function renderCalendar() {
     if (key === currentDate) b.classList.add('selected');
     if (key > today) b.classList.add('future');
     b.innerHTML = `${day}${datesWithLog.has(key) ? '<span class="dot"></span>' : ''}`;
-    b.addEventListener('click', () => { currentDate = key; renderDay(); closeSheet('calendarSheet'); });
+    b.addEventListener('click', () => {
+      if (calMode === 'copy') {
+        if (key === currentDate) { toast('To je aktuální den'); return; }
+        copyDayEntries(key);
+      } else {
+        currentDate = key;
+        renderDay();
+      }
+      calMode = 'nav';
+      closeSheet('calendarSheet');
+    });
     grid.appendChild(b);
   }
 }
@@ -935,6 +1036,7 @@ function renderCalendar() {
 $('prevDay').addEventListener('click', () => shiftDate(-1));
 $('nextDay').addEventListener('click', () => shiftDate(1));
 $('dayLabel').addEventListener('click', openCalendar);
+$('copyDayBtn').addEventListener('click', () => openCalendar('copy'));
 $('calendarBack').addEventListener('click', () => closeSheet('calendarSheet'));
 $('calPrev').addEventListener('click', () => calShiftMonth(-1));
 $('calNext').addEventListener('click', () => calShiftMonth(1));
@@ -956,7 +1058,11 @@ $('meals').addEventListener('click', e => {
   if (edit) return editEntry(edit.dataset.edit);
 });
 
-$('addBack').addEventListener('click', () => { stopScan(); closeSheet('addSheet'); });
+$('addBack').addEventListener('click', () => {
+  stopScan();
+  closeSheet('addSheet');
+  if (recipeMode) { recipeMode = false; openSheet('recipeSheet'); } // zpět na recept, když ruším přidání suroviny
+});
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 $('searchBtn').addEventListener('click', doSearch);
 $('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
@@ -984,6 +1090,16 @@ $('newCustom').addEventListener('click', () => openFoodEditor(null));
 $('foodBack').addEventListener('click', () => closeSheet('foodSheet'));
 $('foodSave').addEventListener('click', saveFood);
 $('foodDelete').addEventListener('click', deleteFood);
+
+$('newRecipe').addEventListener('click', () => { closeSheet('addSheet'); newRecipe(); });
+$('recipeBack').addEventListener('click', () => closeSheet('recipeSheet'));
+$('recipeAdd').addEventListener('click', () => { recipeMode = true; openAdd('snack'); });
+$('recipeSave').addEventListener('click', saveRecipe);
+$('recipePortions').addEventListener('input', renderRecipe);
+$('recipeList').addEventListener('click', e => {
+  const b = e.target.closest('[data-ridel]');
+  if (b) { recipeItems.splice(parseInt(b.dataset.ridel, 10), 1); renderRecipe(); }
+});
 
 document.querySelector('.water-btns').addEventListener('click', e => {
   const b = e.target.closest('[data-water]');
@@ -1014,6 +1130,11 @@ $('calcApply').addEventListener('click', applyCalc);
 document.querySelectorAll('#cSex .seg-btn').forEach(b => b.addEventListener('click', () => {
   calcSex = b.dataset.sex;
   document.querySelectorAll('#cSex .seg-btn').forEach(x => x.classList.toggle('active', x === b));
+}));
+document.querySelectorAll('#cGoal .seg-btn').forEach(b => b.addEventListener('click', () => {
+  calcGoalType = b.dataset.goal;
+  document.querySelectorAll('#cGoal .seg-btn').forEach(x => x.classList.toggle('active', x === b));
+  setCalcGoalUI();
 }));
 
 // Klepnutí na tmavé pozadí sheetu = zavřít
