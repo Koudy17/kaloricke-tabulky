@@ -9,6 +9,8 @@ const LS = {
   favorites: 'kt_favorites',
   weights: 'kt_weights',
   water: 'kt_water',
+  activity: 'kt_activity',
+  strava: 'kt_strava',
 };
 const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -28,6 +30,8 @@ let profile = load(LS.profile, {});        // vstupy do kalkulačky cílů
 let favorites = load(LS.favorites, []);    // oblíbená jídla (snapshoty)
 let weights = load(LS.weights, []);        // záznamy váhy [{date, kg}]
 let water = load(LS.water, {});            // pitný režim { 'YYYY-MM-DD': ml }
+let activity = load(LS.activity, {});      // spálené kalorie { 'YYYY-MM-DD': kcal }
+let strava = load(LS.strava, null);        // { refresh, athlete } po propojení
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -91,14 +95,16 @@ function renderDay() {
   const entries = dayEntries();
   const tot = sumNutri(entries);
 
-  // Prstenec
+  // Prstenec — spálené kalorie z aktivity zvyšují denní rozpočet.
+  const burned = activity[currentDate] || 0;
+  const effGoal = settings.kcal + burned;
   $('kcalNow').textContent = r0(tot.kcal);
-  $('kcalGoal').textContent = r0(settings.kcal);
+  $('kcalGoal').textContent = burned > 0 ? `${r0(settings.kcal)}+${r0(burned)}` : r0(settings.kcal);
   const circ = 2 * Math.PI * 52; // 326.7
-  const frac = settings.kcal > 0 ? Math.min(tot.kcal / settings.kcal, 1) : 0;
+  const frac = effGoal > 0 ? Math.min(tot.kcal / effGoal, 1) : 0;
   const ring = $('ringProgress');
   ring.style.strokeDashoffset = String(circ * (1 - frac));
-  ring.style.stroke = tot.kcal > settings.kcal ? 'var(--danger)' : 'var(--brand)';
+  ring.style.stroke = tot.kcal > effGoal ? 'var(--danger)' : 'var(--brand)';
 
   // Makra
   setMacro('p', tot.prot, settings.prot);
@@ -142,6 +148,7 @@ function renderDay() {
     wrap.appendChild(el);
   }
   renderWater();
+  renderActivity();
 }
 function setMacro(key, val, goal) {
   $(key + 'Val').textContent = `${r0(val)} / ${r0(goal)} g`;
@@ -709,6 +716,7 @@ function openSettings() {
   $('sCarb').value = settings.carb;
   $('sFat').value = settings.fat;
   $('sWater').value = settings.waterGoal;
+  updateStravaUI();
   openSheet('settingsSheet');
 }
 function saveSettings() {
@@ -725,7 +733,7 @@ function saveSettings() {
   toast('Nastavení uloženo');
 }
 function exportData() {
-  const blob = new Blob([JSON.stringify({ foods, log, settings, profile, favorites, weights, water, v: 1 }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ foods, log, settings, profile, favorites, weights, water, activity, v: 1 }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `kaloricke-tabulky-zaloha-${todayKey()}.json`;
@@ -745,8 +753,9 @@ function importData(file) {
       favorites = Array.isArray(d.favorites) ? d.favorites : favorites;
       weights = Array.isArray(d.weights) ? d.weights : weights;
       water = (d.water && typeof d.water === 'object') ? d.water : water;
+      activity = (d.activity && typeof d.activity === 'object') ? d.activity : activity;
       save(LS.foods, foods); save(LS.log, log); save(LS.settings, settings); save(LS.profile, profile);
-      save(LS.favorites, favorites); save(LS.weights, weights); save(LS.water, water);
+      save(LS.favorites, favorites); save(LS.weights, weights); save(LS.water, water); save(LS.activity, activity);
       closeSheet('settingsSheet');
       renderDay();
       toast('Data obnovena ze zálohy');
@@ -884,6 +893,101 @@ function addWater(delta) {
   if (ml === 0) delete water[currentDate]; else water[currentDate] = ml;
   save(LS.water, water);
   renderWater();
+}
+
+/* ---------- Aktivita (spálené kalorie) ---------- */
+function renderActivity() {
+  const kcal = activity[currentDate] || 0;
+  $('activityVal').textContent = `${r0(kcal)} kcal spáleno`;
+  const btn = $('activitySync');
+  if (btn) btn.textContent = strava ? '⟳ Strava' : '＋ Strava';
+}
+function addActivity(delta) {
+  const kcal = Math.max((activity[currentDate] || 0) + delta, 0);
+  if (kcal === 0) delete activity[currentDate]; else activity[currentDate] = kcal;
+  save(LS.activity, activity);
+  renderDay();
+}
+
+/* ---------- Strava (automatické načtení aktivity) ---------- */
+async function stravaConfig() {
+  try { const r = await fetch('/api/strava/config'); if (r.ok) return (await r.json()).clientId; } catch {}
+  return null;
+}
+async function connectStrava() {
+  const clientId = await stravaConfig();
+  if (!clientId) {
+    toast('Strava zatím není nastavená — dokonči nastavení podle návodu.');
+    return;
+  }
+  const redirect = location.origin + '/';
+  const url = 'https://www.strava.com/oauth/authorize?' + new URLSearchParams({
+    client_id: clientId, response_type: 'code', redirect_uri: redirect,
+    approval_prompt: 'auto', scope: 'activity:read_all',
+  });
+  location.href = url;
+}
+// Po návratu z autorizace přijde ?code=... — vyměníme za token.
+async function handleStravaRedirect() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  if (!code || !params.get('scope')) return;
+  history.replaceState(null, '', location.pathname); // uklidit URL
+  try {
+    const r = await fetch('/api/strava/exchange?code=' + encodeURIComponent(code));
+    const d = await r.json();
+    if (d.refresh_token) {
+      strava = { refresh: d.refresh_token, athlete: d.athlete || '' };
+      save(LS.strava, strava);
+      toast('Strava propojena' + (d.athlete ? ` (${d.athlete})` : ''));
+      updateStravaUI();
+      syncStrava(true);
+    } else {
+      toast('Propojení se Stravou se nepovedlo.');
+    }
+  } catch { toast('Propojení se Stravou se nepovedlo.'); }
+}
+async function syncStrava(silent) {
+  if (!strava || !strava.refresh) { connectStrava(); return; }
+  if (!silent) toast('Načítám aktivitu ze Stravy…');
+  const after = Math.floor((Date.now() - 8 * 86400000) / 1000); // posledních ~8 dní
+  try {
+    const r = await fetch(`/api/strava/sync?refresh=${encodeURIComponent(strava.refresh)}&after=${after}`);
+    const d = await r.json();
+    if (d.error) { toast('Strava: ' + d.error); return; }
+    if (d.refresh_token && d.refresh_token !== strava.refresh) {
+      strava.refresh = d.refresh_token; save(LS.strava, strava);
+    }
+    let added = 0;
+    Object.entries(d.byDay || {}).forEach(([day, kcal]) => {
+      if (kcal > 0) { activity[day] = kcal; added += kcal; }
+    });
+    save(LS.activity, activity);
+    renderDay();
+    toast(added > 0 ? `Načteno ${r0(added)} kcal z aktivit` : 'Žádné nové tréninky ve Stravě');
+  } catch { toast('Nepodařilo se načíst data ze Stravy.'); }
+}
+function disconnectStrava() {
+  strava = null;
+  localStorage.removeItem(LS.strava);
+  updateStravaUI();
+  renderActivity();
+  toast('Strava odpojena');
+}
+function updateStravaUI() {
+  const wrap = $('stravaStatus');
+  if (!wrap) return;
+  if (strava) {
+    wrap.innerHTML = `<div class="hint">✅ Propojeno se Stravou${strava.athlete ? ` (${esc(strava.athlete)})` : ''}.</div>` +
+      `<button id="stravaSyncBtn" class="ghost">⟳ Načíst aktivitu teď</button>` +
+      `<button id="stravaDisconnect" class="ghost">Odpojit Stravu</button>`;
+    $('stravaSyncBtn').addEventListener('click', () => syncStrava(false));
+    $('stravaDisconnect').addEventListener('click', disconnectStrava);
+  } else {
+    wrap.innerHTML = `<button id="stravaConnect" class="ghost">🔗 Propojit se Stravou</button>` +
+      `<p class="hint small">Automaticky načte spálené kalorie z tvých tréninků. Potřebuje jednorázové nastavení (návod ti dal Claude).</p>`;
+    $('stravaConnect').addEventListener('click', connectStrava);
+  }
 }
 
 /* ---------- Váha a graf ---------- */
@@ -1109,10 +1213,13 @@ $('recipeList').addEventListener('click', e => {
   if (b) { recipeItems.splice(parseInt(b.dataset.ridel, 10), 1); renderRecipe(); }
 });
 
-document.querySelector('.water-btns').addEventListener('click', e => {
-  const b = e.target.closest('[data-water]');
-  if (b) addWater(parseInt(b.dataset.water, 10));
-});
+document.querySelectorAll('.water-btns').forEach(row => row.addEventListener('click', e => {
+  const w = e.target.closest('[data-water]');
+  if (w) return addWater(parseInt(w.dataset.water, 10));
+  const a = e.target.closest('[data-activity]');
+  if (a) return addActivity(parseInt(a.dataset.activity, 10));
+}));
+$('activitySync').addEventListener('click', () => syncStrava(false));
 
 $('openWeight').addEventListener('click', openWeight);
 $('weightBack').addEventListener('click', () => closeSheet('weightSheet'));
@@ -1157,3 +1264,4 @@ if ('serviceWorker' in navigator) {
 
 /* ---------- Start ---------- */
 renderDay();
+handleStravaRedirect(); // pokud se vracíme z autorizace Stravy

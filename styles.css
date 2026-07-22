@@ -169,6 +169,8 @@ input:focus,select:focus{outline:2px solid var(--brand);outline-offset:-1px}
 .water-btns{display:flex;gap:8px;margin-top:12px}
 .water-btn{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px;font-weight:600;font-size:14px}
 .water-btn:active{background:var(--line)}
+.water-btn.accent{background:#fc4c02;color:#fff;border-color:#fc4c02}
+.water-btn.accent:active{background:#d94002}
 
 /* Váha */
 .weight-chart{margin:16px 0}

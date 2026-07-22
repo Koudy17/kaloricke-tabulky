@@ -57,6 +57,16 @@
     <div id="meals"></div>
 
     <section class="card water-card">
+      <div class="water-head"><span>🔥 Aktivita</span><span id="activityVal">0 kcal spáleno</span></div>
+      <div class="water-btns">
+        <button class="water-btn" data-activity="-100">−100</button>
+        <button class="water-btn" data-activity="100">+100</button>
+        <button class="water-btn" data-activity="250">+250 kcal</button>
+        <button id="activitySync" class="water-btn accent">⟳ Strava</button>
+      </div>
+    </section>
+
+    <section class="card water-card">
       <div class="water-head"><span>💧 Pitný režim</span><span id="waterVal">0 / 2000 ml</span></div>
       <div class="bar"><div id="waterBar" class="bar-fill water"></div></div>
       <div class="water-btns">
@@ -215,6 +225,9 @@
           <button id="openWeight" class="ghost" style="margin-top:0">📉 Váha a graf</button>
           <button id="openOverview" class="ghost" style="margin-top:0">📊 Týdenní přehled</button>
         </div>
+        <hr class="sep" />
+        <p class="hint" style="margin-top:0">🔥 <strong>Aktivita z hodinek (Strava)</strong></p>
+        <div id="stravaStatus"></div>
         <p class="hint" style="margin-top:14px">Denní cíle. Spočítej si je z váhy tlačítkem nahoře, nebo vyplň ručně.</p>
         <label class="field"><span>Cíl energie (kcal)</span><input id="sKcal" type="number" inputmode="decimal" min="0" /></label>
         <label class="field"><span>Bílkoviny (g)</span><input id="sProt" type="number" inputmode="decimal" min="0" /></label>
