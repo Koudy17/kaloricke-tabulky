@@ -914,6 +914,21 @@ function setActivityKcal(kcal) {
   renderDay();
 }
 
+// Načtení aktivity z odkazu (iOS Zkratka z Apple Health): ?burned=435 (&d=YYYY-MM-DD)
+function handleActivityParam() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('burned')) return;
+  const kcal = Math.max(Math.round(parseFloat(params.get('burned'))) || 0, 0);
+  const d = params.get('d');
+  const dateKey = (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : todayKey();
+  if (kcal > 0) activity[dateKey] = kcal; else delete activity[dateKey];
+  save(LS.activity, activity);
+  history.replaceState(null, '', location.pathname);
+  currentDate = dateKey;
+  renderDay();
+  toast(`Aktivita z hodinek: ${kcal} kcal`);
+}
+
 /* ---------- Strava (automatické načtení aktivity) ---------- */
 async function stravaConfig() {
   try { const r = await fetch('/api/strava/config'); if (r.ok) return (await r.json()).clientId; } catch {}
@@ -1275,4 +1290,5 @@ if ('serviceWorker' in navigator) {
 
 /* ---------- Start ---------- */
 renderDay();
+handleActivityParam();  // ?burned= z iOS Zkratky (Apple Health)
 handleStravaRedirect(); // pokud se vracíme z autorizace Stravy
