@@ -899,11 +899,16 @@ function addWater(delta) {
 function renderActivity() {
   const kcal = activity[currentDate] || 0;
   $('activityVal').textContent = `${r0(kcal)} kcal spáleno`;
+  const inp = $('activityInput');
+  if (inp && document.activeElement !== inp) inp.value = kcal > 0 ? r0(kcal) : '';
   const btn = $('activitySync');
   if (btn) btn.textContent = strava ? '⟳ Strava' : '＋ Strava';
 }
 function addActivity(delta) {
-  const kcal = Math.max((activity[currentDate] || 0) + delta, 0);
+  setActivityKcal(Math.max((activity[currentDate] || 0) + delta, 0));
+}
+function setActivityKcal(kcal) {
+  kcal = Math.max(Math.round(kcal) || 0, 0);
   if (kcal === 0) delete activity[currentDate]; else activity[currentDate] = kcal;
   save(LS.activity, activity);
   renderDay();
@@ -1220,6 +1225,12 @@ document.querySelectorAll('.water-btns').forEach(row => row.addEventListener('cl
   if (a) return addActivity(parseInt(a.dataset.activity, 10));
 }));
 $('activitySync').addEventListener('click', () => syncStrava(false));
+$('activitySet').addEventListener('click', () => {
+  setActivityKcal(parseFloat($('activityInput').value) || 0);
+  $('activityInput').blur();
+  toast('Aktivita zapsána');
+});
+$('activityInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('activitySet').click(); });
 
 $('openWeight').addEventListener('click', openWeight);
 $('weightBack').addEventListener('click', () => closeSheet('weightSheet'));
